@@ -6,6 +6,7 @@ use cw2::set_contract_version;
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, GetStateResponse, InstantiateMsg, QueryMsg};
 use crate::state::{GridCell, State, STATE, Turn};
+use rand::prelude::*;
 
 /**
  * Tic Tac Toe contract
@@ -66,7 +67,19 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::Move {row, col} => try_move(deps, info, row, col),
+        ExecuteMsg::MoveRandom { } => try_move_random(deps, info),
     }
+}
+
+pub fn try_move_random(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError> {
+    let state = STATE.load(deps.storage)?;
+    if state.players[0] != info.sender {
+        return Err(ContractError::InvalidPlayer {});
+    }
+    let mut rng = thread_rng();
+    let row = rng.gen_range(0..3);
+    let col = rng.gen_range(0..3);
+    try_move(deps, info, row, col)
 }
 
 pub fn try_move(deps: DepsMut, info: MessageInfo, row: u8, col: u8) -> Result<Response, ContractError> {
@@ -132,8 +145,36 @@ pub fn try_move(deps: DepsMut, info: MessageInfo, row: u8, col: u8) -> Result<Re
     Ok(Response::new().add_attribute("method", "try_move"))
 }
 
+pub fn grid_to_addr_index(grid: GridCell) -> usize {
+    match grid {
+        GridCell::Empty => 0,
+        GridCell::X => 1,
+        GridCell::O => 2,
+    }
+}
+
 pub fn check_winner(board: &[[GridCell; 3]; 3], players: &[Addr; 2]) -> Option<Addr> {
-    None
+    // check rows
+    for row in 0..3 {
+        if board[row][0] == board[row][1] && board[row][1] == board[row][2] && board[row][0] != GridCell::Empty {
+            let index = grid_to_addr_index(board[row][0]);
+            return Some(players[index]);
+        }
+    }
+
+    // check columns
+    for col in 0..3 {
+        if board[0][col] == board[1][col] && board[1][col] == board[2][col] && board[0][col] != GridCell::Empty {
+            return Some(players[board[0][col]]);
+        }
+    }
+
+    // check diagonals
+    if board[0][0] == board[1][1] && board[1][1] == board[2][2] && board[0][0] != GridCell::Empty {
+        return Some(players[board[0][0]]);
+    }
+
+    return None;
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -153,6 +194,7 @@ mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
     use cosmwasm_std::{coins, from_binary};
+    use rand::prelude::*;
 
     #[test]
     fn proper_initialization() {
@@ -182,6 +224,25 @@ mod tests {
         // beneficiary can release it
         let info = mock_info("player0", &coins(2, "token"));
         let msg = ExecuteMsg::Move { row: 0, col: 0 };
+        let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        // should increase counter by 1
+        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetState {}).unwrap();
+        let state: GetStateResponse = from_binary(&res).unwrap();
+        assert_eq!(GridCell::O, state.state.board[0][0]);
+    }
+
+    #[test]
+    fn test_move_random() {
+        let mut deps = mock_dependencies();
+
+        let msg = InstantiateMsg { opponent: Addr::unchecked("player1") };
+        let info = mock_info("player0", &coins(2, "token"));
+        let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        // beneficiary can release it
+        let info = mock_info("player0", &coins(2, "token"));
+        let msg = ExecuteMsg::MoveRandom { };
         let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
         // should increase counter by 1
