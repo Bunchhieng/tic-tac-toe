@@ -84,7 +84,7 @@ pub fn try_move_random(deps: DepsMut, info: MessageInfo) -> Result<Response, Con
 
 pub fn try_move(deps: DepsMut, info: MessageInfo, row: u8, col: u8) -> Result<Response, ContractError> {
     // check if the row and col are valid
-    if (row < 0 || row > 2) || (col < 0 || col > 2) {
+    if ( row > 2) || (col > 2) {
         return Err(ContractError::InvalidMove {
             msg: "Row and col must be between 1 and 3".to_string(),
         });
@@ -158,20 +158,22 @@ pub fn check_winner(board: &[[GridCell; 3]; 3], players: &[Addr; 2]) -> Option<A
     for row in 0..3 {
         if board[row][0] == board[row][1] && board[row][1] == board[row][2] && board[row][0] != GridCell::Empty {
             let index = grid_to_addr_index(board[row][0]);
-            return Some(players[index]);
+            return Some(players[index].clone());
         }
     }
 
     // check columns
     for col in 0..3 {
         if board[0][col] == board[1][col] && board[1][col] == board[2][col] && board[0][col] != GridCell::Empty {
-            return Some(players[board[0][col]]);
+            let index = grid_to_addr_index(board[0][col]);
+            return Some(players[index].clone());
         }
     }
 
     // check diagonals
     if board[0][0] == board[1][1] && board[1][1] == board[2][2] && board[0][0] != GridCell::Empty {
-        return Some(players[board[0][0]]);
+        let index = grid_to_addr_index(board[0][0]);
+        return Some(players[index].clone());
     }
 
     return None;
